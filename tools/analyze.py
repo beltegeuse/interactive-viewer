@@ -18,6 +18,7 @@ from PIL import Image
 import json
 import csv
 import math
+import fnmatch
 from metric import compute_metric, falsecolor, falsecolor_np
 
 NP_INT_TYPES = [np.int8, np.int16, np.int32, np.int64,
@@ -331,6 +332,8 @@ if __name__ == '__main__':
                         help='algorithms names', nargs='+', type=str)
     parser.add_argument('-m',   '--metrics',   help='difference metrics', nargs='+',
                         choices=['l1', 'l2', 'mrse', 'mape', 'smape', 'dssim'], type=str, required=True)
+    parser.add_argument('-s',   '--select',   help='select run with name pattern', nargs='+',
+                        type=str, required=True)
     parser.add_argument('-np',  '--negpos',
                         help='shows negative/positive SMAPE', action='store_true')
     parser.add_argument('-p',   '--partials',
@@ -386,6 +389,17 @@ if __name__ == '__main__':
                 continue 
 
             name = t.split(os.path.sep)[-1] #.replace('_partial', '')
+            match = False
+            if args.select:
+                for s in args.select:
+                    match = match or fnmatch.fnmatch(name, s)
+            else:
+                match = True
+            
+            if not match:
+                print(f'[IGNORE] {name}')
+                continue
+
             names += [t]
             partials += [t]
 

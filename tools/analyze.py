@@ -66,6 +66,7 @@ def hdr_to_ldr(path_dir, img):
         ldr = Image.fromarray(
             (pyexr.tonemap(img['data']) * 255).astype(np.uint8))
     ldr_fname = '{}.png'.format(img['name'])
+    ldr_fname = os.path.basename(ldr_fname)
     ldr_path = os.path.join(path_dir, ldr_fname)
     ldr.save(ldr_path)
     ldr_entry = {'title': img['name'], 'version': '-', 'image': ldr_fname}
@@ -146,8 +147,8 @@ def track_convergence(data, ref, test_dirs, metrics, eps=1e-2):
 
     # Insert into dictionary (the ugliness of this is an artefact of using JSON...)
     for t, test_dir in enumerate(test_dirs):
-        time_file = os.path.basename('{}_time.csv'.format(
-            '_'.join(test_dir.split('_')[:-1])))
+        time_file = os.path.basename('{}_time.csv'.format(test_dir))
+        # partial: .format('_'.join(test_dir.split('_')[:-1])))
         with open(os.path.join(test_dir, time_file)) as fp:
             timesteps = [item for sublist in list(
                 csv.reader(fp)) for item in sublist]
@@ -176,7 +177,7 @@ def update_stats(path_dir, data, ref, tests, metrics, clip, eps=1e-2):
         if is_new:
             data['imageBoxes'][0]['elements'].append(
                 hdr_to_ldr(path_dir, test))
-            data['stats'][0]['labels'].append(test['name'])
+            data['stats'][0]['labels'].append(os.path.basename(test['name']))
         else:
             t = find_idx(test, data)
             hdr_to_ldr(path_dir, test)
@@ -197,7 +198,7 @@ def update_stats(path_dir, data, ref, tests, metrics, clip, eps=1e-2):
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             if is_new:
-                fc_entry = {'title': test['name'],
+                fc_entry = {'title': os.path.basename(test['name']),
                             'version': '-', 'image': fc_fname}
                 data['imageBoxes'][m+1]['elements'].append(fc_entry)
 
@@ -222,7 +223,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
     for t, test in enumerate(tests):
         # Update dictionary
         data['imageBoxes'][0]['elements'].append(hdr_to_ldr(path_dir, test))
-        data['stats'][0]['labels'].append(test['name'])
+        data['stats'][0]['labels'].append(os.path.basename(test['name']))
 
         # Compute all metrics
         stat_entry = {test['name']: {}}
@@ -235,6 +236,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             # Compute false color heatmap and save to files
             fc = falsecolor(err_img, clip, eps)
             fc_fname = '{}-{}.png'.format(test['name'], metric.upper())
+            fc_fname = os.path.basename(fc_fname)
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save stats, if necessary
@@ -250,7 +252,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
         for t, test in enumerate(tests):
             # Add false color filenames to dict
             fc_fname = stats[t][test['name']][metric.upper()]['fc']
-            entry = {'title': test['name'], 'version': '-', 'image': fc_fname}
+            entry = {'title': os.path.basename(test['name']), 'version': '-', 'image': fc_fname}
             fc_entry['elements'].append(entry)
 
             # Add metric value to dict
@@ -268,10 +270,11 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             # Compute the N/P false color image
             fc = falsecolor_np(ref, test['data'], eps)
             fc_fname = '{}-NP.png'.format(test['name'])
+            fc_fname = os.path.basename(fc_fname)
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save the fcname inside JSON
-            entry = {'title': test['name'], 'version': '-', 'image': fc_fname}
+            entry = {'title': os.path.basename(test['name']), 'version': '-', 'image': fc_fname}
             fc_entry['elements'].append(entry)
 
         # Update dictionary with false color filenames
@@ -283,6 +286,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
 
 def detect_extension(filepath):
     """Check if file (with supported extension) exists and return its extension."""
+    print(filepath)
     if os.path.exists(filepath + '.exr'):
         return 'exr'
     elif os.path.exists(filepath + '.hdr'):
@@ -363,22 +367,26 @@ if __name__ == '__main__':
         if (len(partials) != 0):
             raise Exception(
                 'Partials (--partials) cannot be used with automatic mode (-A)')
-        if (reference != None):
-            raise Exception(
-                'Reference cannot be provided with automatic mode (-A); default assumes "Reference.exr" in scene directory')
 
-        # Check the reference
-        reference = os.path.join(args.automatic, 'Reference.exr')
+        # Use the default path if the reference is provided.
+        if reference == None:
+            reference = os.path.join(args.automatic, 'Reference.exr')
+        
         if (not os.path.exists(reference)):
             raise Exception(
                 'Could not load reference image: {}'.format(reference))
 
         # Extract all the techniques names
         tests, names, partials = [], [], []
-        print(os.path.join(args.automatic, '*_partial'))
-        for t in glob.glob(os.path.join(args.automatic, '*_partial')):
-            name = t.split(os.path.sep)[-1].replace('_partial', '')
-            names += [name]
+        print(os.path.join(args.automatic, '*'))
+        for t in glob.glob(os.path.join(args.automatic, '*')):
+            if not os.path.isdir(t):
+                # We are only interested about the directory
+                # Normally, each directory contain a run...
+                continue 
+
+            name = t.split(os.path.sep)[-1] #.replace('_partial', '')
+            names += [t]
             partials += [t]
 
             # Determine extension by checking first partial file
@@ -394,6 +402,8 @@ if __name__ == '__main__':
 
             print('Using {} to represent {}'.format(img, name))
             tests += [img]
+        print(f'Names founds: {names}')
+
     else:
         # Check if everything needed is provided
         if (tests == None):
@@ -429,7 +439,7 @@ if __name__ == '__main__':
         # For e.g. handling greek symbols
         test_name = test_name.encode('utf8').decode('unicode_escape')
         test_names.append(test_name)
-        test_configs.append({'name': test_name, 'data': img})
+        test_configs.append({'name': os.path.basename(test_name), 'data': img})
 
     # Compute stats
     sys.stdout.write('Computing stats... ')

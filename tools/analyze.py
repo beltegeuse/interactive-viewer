@@ -333,7 +333,7 @@ if __name__ == '__main__':
     parser.add_argument('-m',   '--metrics',   help='difference metrics', nargs='+',
                         choices=['l1', 'l2', 'mrse', 'mape', 'smape', 'dssim'], type=str, required=True)
     parser.add_argument('-s',   '--select',   help='select run with name pattern', nargs='+',
-                        type=str, required=True)
+                        type=str)
     parser.add_argument('-np',  '--negpos',
                         help='shows negative/positive SMAPE', action='store_true')
     parser.add_argument('-p',   '--partials',

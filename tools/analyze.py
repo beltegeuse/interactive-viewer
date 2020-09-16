@@ -344,10 +344,12 @@ if __name__ == '__main__':
                         help='exposure value', type=float, default=0.0)                      
     parser.add_argument('-c',   '--clip',      help='clipping values for min/max',
                         nargs=2, type=float, default=[0, 1])
-    parser.add_argument(
-        '-d',   '--dir',       help='corresponding viewer scene directory', type=str, required=True)
+    parser.add_argument('-d',   '--dir',       
+                        help='corresponding viewer scene directory', type=str, required=True)
     parser.add_argument('-A',   '--automatic',
                         help='scene directory for automatic mode', type=str)
+    parser.add_argument('-x',   '--rename',
+                        help='Rename technique ["previous_name:new_name"]', action="append", default=[])
 
     args = parser.parse_args()
 
@@ -359,6 +361,11 @@ if __name__ == '__main__':
     exposure = math.pow(2, args.exposure)
     reference = args.ref
     partials = [] if args.partials is None else args.partials
+    rename = {}
+    for r in args.rename:
+        v = r.split(":")
+        rename[v[0]] = v[1]
+
     if (args.automatic):
         # Arguments needs to be empty for automatic mode
         if (tests != None):
@@ -395,12 +402,18 @@ if __name__ == '__main__':
                     match = match or fnmatch.fnmatch(name, s)
             else:
                 match = True
-            
             if not match:
                 print(f'[IGNORE] {name}')
                 continue
-
-            names += [t]
+            
+            # Rename if necessary
+            t_name = os.path.basename(t)
+            if t_name in rename:
+                print(f'[RENAME] {t_name} -> {rename[t_name]}')
+                t_name = rename[t_name]
+            names += [t_name]
+            
+            # Partial does not change name
             partials += [t]
 
             # Determine extension by checking first partial file

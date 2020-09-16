@@ -68,6 +68,7 @@ def hdr_to_ldr(path_dir, img):
             (pyexr.tonemap(img['data']) * 255).astype(np.uint8))
     ldr_fname = '{}.png'.format(img['name'])
     ldr_fname = os.path.basename(ldr_fname)
+    ldr_fname = ldr_fname.replace(" ", "_")
     ldr_path = os.path.join(path_dir, ldr_fname)
     ldr.save(ldr_path)
     ldr_entry = {'title': img['name'], 'version': '-', 'image': ldr_fname}
@@ -196,6 +197,7 @@ def update_stats(path_dir, data, ref, tests, metrics, clip, eps=1e-2):
             # Recompute false color heatmap and save to files
             fc = falsecolor(err_img, clip, eps)
             fc_fname = '{}-{}.png'.format(test['name'], metric.upper())
+            fc_fname = fc_fname.replace(" ", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             if is_new:
@@ -238,6 +240,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             fc = falsecolor(err_img, clip, eps)
             fc_fname = '{}-{}.png'.format(test['name'], metric.upper())
             fc_fname = os.path.basename(fc_fname)
+            fc_fname = fc_fname.replace(" ", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save stats, if necessary
@@ -272,6 +275,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             fc = falsecolor_np(ref, test['data'], eps)
             fc_fname = '{}-NP.png'.format(test['name'])
             fc_fname = os.path.basename(fc_fname)
+            fc_fname = fc_fname.replace(" ", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save the fcname inside JSON

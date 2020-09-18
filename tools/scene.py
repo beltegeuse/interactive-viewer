@@ -106,12 +106,12 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(dest='action')
     # Create new scene
     parser_add = subparsers.add_parser('add')
-    parser_add.add_argument('-n', '--name', help='scene name', type=str)
+    parser_add.add_argument('-n', '--name', help='scene name', type=str, action="append", default=[])
     # List scenes
     parser_list = subparsers.add_parser('list')
     # Remove scene
     parser_remove = subparsers.add_parser('remove')
-    parser_remove.add_argument('-n', '--name', help='scene name', type=str)
+    parser_remove.add_argument('-n', '--name', help='scene name', type=str, action="append", default=[])
 
     args = parser.parse_args()
 
@@ -147,12 +147,14 @@ if __name__ == '__main__':
 
     # Update directory index and create dummy file for new scene
     if args.action == 'add':
-        add_to_index(args.root, args.name)
-        create_dummy(interactive_dir, args.root, args.name)
+        for name in args.name:
+            add_to_index(args.root, name)
+            create_dummy(interactive_dir, args.root, name)
     # Update HTML index and remove dummy file
     elif args.action == 'remove':
-        found = remove_from_index(args.root, args.name)
-        if found: remove_dummy(args.root, args.name)
+        for name in args.name:
+            found = remove_from_index(args.root, name)
+            if found: remove_dummy(args.root, name)
     elif args.action == 'list':
         list_index(args.root)
     else:

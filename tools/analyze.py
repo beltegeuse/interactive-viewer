@@ -19,6 +19,7 @@ import json
 import csv
 import math
 import fnmatch
+import numpy as np
 from metric import compute_metric, falsecolor, falsecolor_np
 
 NP_INT_TYPES = [np.int8, np.int16, np.int32, np.int64,
@@ -69,6 +70,7 @@ def hdr_to_ldr(path_dir, img):
     ldr_fname = '{}.png'.format(img['name'])
     ldr_fname = os.path.basename(ldr_fname)
     ldr_fname = ldr_fname.replace(" ", "_")
+    ldr_fname = ldr_fname.replace("+", "_")
     ldr_path = os.path.join(path_dir, ldr_fname)
     ldr.save(ldr_path)
     ldr_entry = {'title': img['name'], 'version': '-', 'image': ldr_fname}
@@ -105,7 +107,7 @@ def parse_stats(test_dirs, test_names):
     return stat_dicts
 
 
-def track_convergence(data, ref, test_dirs, metrics, eps=1e-2):
+def track_convergence(data, ref, test_dirs, metrics, time, eps=1e-2):
     """Track error convergence over partial renders."""
 
     def num_order(x): return int(x.split('_')[-1].split('.')[0])
@@ -147,23 +149,36 @@ def track_convergence(data, ref, test_dirs, metrics, eps=1e-2):
             seq = [float(stat[metric]) for stat in all_stats[p]]
             all_metrics[metric].append(seq)
 
+    if time:
+            time_entry = {'label' : "time", 'data': [], 'track' : {"x" : [], "y" : []}}
+            data['stats'][0]['series'].append(time_entry)
+
     # Insert into dictionary (the ugliness of this is an artefact of using JSON...)
     for t, test_dir in enumerate(test_dirs):
         time_file = os.path.basename('{}_time.csv'.format(test_dir))
-        # partial: .format('_'.join(test_dir.split('_')[:-1])))
         with open(os.path.join(test_dir, time_file)) as fp:
             timesteps = [item for sublist in list(
                 csv.reader(fp)) for item in sublist]
-
-        # Round to nearest ten, assuming frequency % 10 = 0
         timesteps = list(map(float, list(filter(None, timesteps))))
-        timesteps = list(map(round_10, timesteps))
 
         for metric in metrics:
             for entry in data['stats'][0]['series']:
                 if entry['label'] == metric.upper():
                     entry['track']['x'].append(timesteps)
                     entry['track']['y'].append(all_metrics[metric][t])
+        
+        # Write the time per iteration 
+        if time:
+            def time_conv(i):
+                if i == 0:
+                    return timesteps[0]
+                else:
+                    return timesteps[i] - timesteps[i-1]
+            time_entry['track']['x']
+            time_entry['track']['x'].append([i for i in range(len(timesteps))])
+            time_entry['track']['y'].append([time_conv(i) for i in range(len(timesteps))])
+            time_entry['data'].append('{:.6f}'.format(np.mean([time_conv(i) for i in range(len(timesteps))])))
+         
 
 
 def update_stats(path_dir, data, ref, tests, metrics, clip, eps=1e-2):
@@ -198,6 +213,7 @@ def update_stats(path_dir, data, ref, tests, metrics, clip, eps=1e-2):
             fc = falsecolor(err_img, clip, eps)
             fc_fname = '{}-{}.png'.format(test['name'], metric.upper())
             fc_fname = fc_fname.replace(" ", "_")
+            fc_fname = fc_fname.replace("+", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             if is_new:
@@ -241,6 +257,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             fc_fname = '{}-{}.png'.format(test['name'], metric.upper())
             fc_fname = os.path.basename(fc_fname)
             fc_fname = fc_fname.replace(" ", "_")
+            fc_fname = fc_fname.replace("+", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save stats, if necessary
@@ -276,6 +293,7 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
             fc_fname = '{}-NP.png'.format(test['name'])
             fc_fname = os.path.basename(fc_fname)
             fc_fname = fc_fname.replace(" ", "_")
+            fc_fname = fc_fname.replace("+", "_")
             plt.imsave(os.path.join(path_dir, fc_fname), fc)
 
             # Save the fcname inside JSON
@@ -291,7 +309,6 @@ def compute_stats(path_dir, ref, tests, metrics, clip, negpos, eps=1e-2):
 
 def detect_extension(filepath):
     """Check if file (with supported extension) exists and return its extension."""
-    print(filepath)
     if os.path.exists(filepath + '.exr'):
         return 'exr'
     elif os.path.exists(filepath + '.hdr'):
@@ -329,7 +346,7 @@ if __name__ == '__main__':
         description='Batch analysis of rendered images.')
 
     parser.add_argument('-r',   '--ref',
-                        help='reference image filename', type=str)
+                        help='reference image filename', type=str, required=True)
     parser.add_argument('-t',   '--tests',
                         help='test images filename', nargs='+', type=str)
     parser.add_argument('-n',   '--names',
@@ -340,6 +357,8 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument('-np',  '--negpos',
                         help='shows negative/positive SMAPE', action='store_true')
+    parser.add_argument('-time',  '--time',
+                        help='shows time per iteration', action='store_true')
     parser.add_argument('-p',   '--partials',
                         help='partial renders to track convergence', nargs='+', type=str)
     parser.add_argument('-eps', '--epsilon',
@@ -351,7 +370,7 @@ if __name__ == '__main__':
     parser.add_argument('-d',   '--dir',       
                         help='corresponding viewer scene directory', type=str, required=True)
     parser.add_argument('-A',   '--automatic',
-                        help='scene directory for automatic mode', type=str)
+                        help='scene directory for automatic mode', type=str, action="append", default=[])
     parser.add_argument('-x',   '--rename',
                         help='Rename technique ["previous_name:new_name"]', action="append", default=[])
 
@@ -370,7 +389,11 @@ if __name__ == '__main__':
         v = r.split(":")
         rename[v[0]] = v[1]
 
-    if (args.automatic):
+    if (not os.path.exists(reference)):
+        raise Exception(
+            'Could not load reference image: {}'.format(reference))
+
+    if args.automatic != []:
         # Arguments needs to be empty for automatic mode
         if (tests != None):
             raise Exception(
@@ -381,19 +404,18 @@ if __name__ == '__main__':
         if (len(partials) != 0):
             raise Exception(
                 'Partials (--partials) cannot be used with automatic mode (-A)')
-
-        # Use the default path if the reference is provided.
-        if reference == None:
-            reference = os.path.join(args.automatic, 'Reference.exr')
-        
-        if (not os.path.exists(reference)):
-            raise Exception(
-                'Could not load reference image: {}'.format(reference))
-
-        # Extract all the techniques names
         tests, names, partials = [], [], []
-        print(os.path.join(args.automatic, '*'))
-        for t in glob.glob(os.path.join(args.automatic, '*')):
+    else:
+        # Check if everything needed is provided
+        if (tests == None):
+            raise Exception(
+                'Tests (--tests) is required when not in automatic mode')
+
+
+    for auto_dir in args.automatic:
+        # Extract all the techniques names
+        print(f'[GLOB] {os.path.join(auto_dir, "*")}')
+        for t in glob.glob(os.path.join(auto_dir, '*')):
             if not os.path.isdir(t):
                 # We are only interested about the directory
                 # Normally, each directory contain a run...
@@ -431,17 +453,8 @@ if __name__ == '__main__':
                     'Could not find files matching {}'.format(glob_expr))
             img = max(img, key=os.path.getctime)
 
-            print('Using {} to represent {}'.format(img, name))
             tests += [img]
         print(f'Names founds: {names}')
-
-    else:
-        # Check if everything needed is provided
-        if (tests == None):
-            raise Exception(
-                'Tests (--tests) is required when not in automatic mode')
-        if (reference == None):
-            raise Exception('Need to provide a reference (using --ref)')
 
     # Clean partial path by removing os.path.sep
     for i in range(len(partials)):
@@ -478,6 +491,6 @@ if __name__ == '__main__':
     data = compute_stats(args.dir, ref, test_configs,
                          args.metrics, args.clip, args.negpos, args.epsilon)
     if (partials):
-        track_convergence(data, ref, partials, args.metrics, args.epsilon)
+        track_convergence(data, ref, partials, args.metrics, args.time, args.epsilon)
     write_data(args.dir, data)
     print('done.')

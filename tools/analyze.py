@@ -107,7 +107,7 @@ def parse_stats(test_dirs, test_names):
     return stat_dicts
 
 
-def track_convergence(data, ref, test_dirs, metrics, time, eps=1e-2):
+def track_convergence(data, ref, test_dirs, metrics, time, eps=1e-2, exposure=1, sametime=False):
     """Track error convergence over partial renders."""
 
     def num_order(x): return int(x.split('_')[-1].split('.')[0])
@@ -128,7 +128,7 @@ def track_convergence(data, ref, test_dirs, metrics, time, eps=1e-2):
         # All partial images within a directory
         dir_stat = []
         for partial_f in partial_files:
-            test = load_img(partial_f)
+            test = load_img(partial_f) * exposure
 
             # Compute all metrics on (ref, test) pair
             metric_dict = {}
@@ -159,7 +159,10 @@ def track_convergence(data, ref, test_dirs, metrics, time, eps=1e-2):
         with open(os.path.join(test_dir, time_file)) as fp:
             timesteps = [item for sublist in list(
                 csv.reader(fp)) for item in sublist]
-        timesteps = list(map(float, list(filter(None, timesteps))))
+        if sametime:
+            timesteps = [float(i) for i in range(len(timesteps))]
+        else:
+            timesteps = list(map(float, list(filter(None, timesteps))))
 
         for metric in metrics:
             for entry in data['stats'][0]['series']:
@@ -374,6 +377,10 @@ if __name__ == '__main__':
     parser.add_argument('-x',   '--rename',
                         help='Rename technique ["previous_name:new_name"]', action="append", default=[])
 
+    # DEBUG flag
+    parser.add_argument('--sametime', 
+                        help='make all technique have the same rendering time per iteration', action='store_true')
+
     args = parser.parse_args()
 
     # In automatic mode, check if conflicts with other arguments
@@ -491,6 +498,6 @@ if __name__ == '__main__':
     data = compute_stats(args.dir, ref, test_configs,
                          args.metrics, args.clip, args.negpos, args.epsilon)
     if (partials):
-        track_convergence(data, ref, partials, args.metrics, args.time, args.epsilon)
+        track_convergence(data, ref, partials, args.metrics, args.time, args.epsilon, exposure, args.sametime)
     write_data(args.dir, data)
     print('done.')
